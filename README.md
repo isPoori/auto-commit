@@ -34,6 +34,10 @@ Auto Commit is a Visual Studio Code extension that automatically commits and pus
 If you find a bug or have suggestions, please open an issue at:
 [GitHub Issues](https://github.com/isPoori/auto-commit/issues)
 
+# Developer
+Pouria Hosseini 
+[Telegram](https://t.me/isPoori) 
+
 ## License
 This extension is licensed under the **MIT License**.
 
