@@ -26,10 +26,6 @@ Auto Commit is a Visual Studio Code extension that automatically commits and pus
 2. Type and select: `Disable Auto Commit`.
 3. Auto commit will be turned off.
 
-## Requirements
-- You must have **Git** installed and initialized in your workspace (`git init` if not already initialized).
-- The workspace must be a valid Git repository with a remote set up.
-
 ## Notes
 - If no changes are detected, no commit will be made.
 - If an error occurs (e.g., no remote repository), an error message will be displayed.
