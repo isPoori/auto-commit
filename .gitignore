@@ -1,0 +1,36 @@
+# Node modules
+node_modules/
+
+# Files related to VSIX packaging
+*.vsix
+
+# Log files
+*.log
+
+# Environment files (in case you're using them)
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.bak
+*.tmp
+
+# OS-specific files
+.DS_Store  # macOS
+Thumbs.db  # Windows
+
+# Editor/IDE files
+.idea/
+.vscode/
+
+# Package lock file - if you want to ignore it (not recommended to ignore in most cases)
+# package-lock.json
+
+# Ignore the LICENSE file if you do not want to include it
+# LICENSE
+
+# Ignore other unnecessary files or build output
+/dist
+/build
+coverage/
