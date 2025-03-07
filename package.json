@@ -2,7 +2,7 @@
     "name": "omga-auto-commit",
     "displayName": "Omga Auto Commit",
     "description": "A VS Code extension for automatically committing and pushing code changes.",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "publisher": "PouriaHosseini",
     "engines": {
       "vscode": "^1.60.0"
