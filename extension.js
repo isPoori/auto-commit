@@ -147,31 +147,27 @@ function activate(context) {
         try {
             // Check if this is a Git repository
             if (!isGitRepository(workspaceRoot)) {
-                vscode.window.showErrorMessage('This project is not a Git repository. Would you like to initialize one?', 'Yes', 'No')
-                    .then(answer => {
-                        if (answer === 'Yes') {
-                            initializeGitRepository(workspaceRoot);
-                        }
-                    });
-                return;
-            }
-
-            // Check for pending changes before proceeding
-            const hasPendingChanges = await checkForPendingChanges(workspaceRoot);
-            if (hasPendingChanges) {
-                const shouldProceed = await vscode.window.showWarningMessage(
-                    'There are pending changes in your repository. Would you like to commit them now?',
-                    'Yes', 'No, start fresh', 'Cancel'
+                // Auto-initialize Git if it's not a repository yet
+                const shouldInitialize = await vscode.window.showInformationMessage(
+                    'This project is not a Git repository. Would you like to initialize one?', 
+                    'Yes', 'No'
                 );
                 
-                if (shouldProceed === 'Yes') {
-                    await performCommit(workspaceRoot, true);
-                } else if (shouldProceed === 'Cancel') {
-                    return;
+                if (shouldInitialize === 'Yes') {
+                    try {
+                        initializeGitRepository(workspaceRoot);
+                        // Wait a moment for Git to initialize
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    } catch (initError) {
+                        vscode.window.showErrorMessage(`Failed to initialize Git repository: ${initError.message}`);
+                        return;
+                    }
+                } else {
+                    return; // User chose not to initialize Git
                 }
             }
-            
-            // Set up file watcher for changes
+    
+            // Set up file watcher for changes even if there's no Git yet
             if (fileWatcher) {
                 fileWatcher.dispose();
             }
@@ -202,12 +198,50 @@ function activate(context) {
                 updateStatusBar();
             });
             
+            // Only try Git operations if Git is initialized
+            if (isGitRepository(workspaceRoot)) {
+                // Check for pending changes before proceeding
+                try {
+                    const hasPendingChanges = await checkForPendingChanges(workspaceRoot);
+                    if (hasPendingChanges) {
+                        const shouldProceed = await vscode.window.showWarningMessage(
+                            'There are pending changes in your repository. Would you like to commit them now?',
+                            'Yes', 'No, start fresh', 'Cancel'
+                        );
+                        
+                        if (shouldProceed === 'Yes') {
+                            await performCommit(workspaceRoot, true);
+                        } else if (shouldProceed === 'Cancel') {
+                            return;
+                        }
+                    }
+                } catch (gitError) {
+                    // If Git operations fail, just log and continue
+                    console.error('Git operation failed, continuing anyway:', gitError);
+                }
+            }
+            
             isEnabled = true;
             updateStatusBar();
             vscode.window.showInformationMessage(`Auto-commit enabled. Changes will be committed every ${config.commitDelay / 1000} seconds.`);
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to enable auto-commit: ${error.message}`);
-            console.error('Error enabling auto-commit:', error);
+            // Handle errors more gracefully
+            console.error('Error in enableAutoCommit:', error);
+            vscode.window.showErrorMessage(`Error in auto-commit: ${error.message}`);
+            
+            // Even if there was an error, still try to enable file watching
+            try {
+                if (!fileWatcher) {
+                    fileWatcher = vscode.workspace.createFileSystemWatcher(`**/*`, false, false, false);
+                    fileWatcher.onDidChange(() => pendingChangesCount++);
+                    fileWatcher.onDidCreate(() => pendingChangesCount++);
+                    fileWatcher.onDidDelete(() => pendingChangesCount++);
+                }
+                isEnabled = true;
+                updateStatusBar();
+            } catch (watchError) {
+                console.error('Failed to set up file watcher:', watchError);
+            }
         }
     }
 
@@ -241,7 +275,52 @@ function activate(context) {
     }
 
     function isGitRepository(workspaceRoot) {
-        return fs.existsSync(path.join(workspaceRoot, '.git'));
+        try {
+            return fs.existsSync(path.join(workspaceRoot, '.git'));
+        } catch (error) {
+            console.error('Error checking if directory is a Git repository:', error);
+            return false;
+        }
+    }
+    
+    function initializeGitRepository(workspaceRoot) {
+        try {
+            // First make sure the directory exists
+            if (!fs.existsSync(workspaceRoot)) {
+                fs.mkdirSync(workspaceRoot, { recursive: true });
+            }
+            
+            // Initialize Git repository
+            execSync(`cd "${workspaceRoot}" && git init`, { encoding: 'utf8' });
+            
+            // Create a .gitignore file with common exclusions
+            const gitignoreContent = `# Auto-generated .gitignore by Auto-Commit extension
+    node_modules/
+    .DS_Store
+    Thumbs.db
+    *.log
+    .vscode/
+    dist/
+    build/
+    *.tmp
+    `;
+            fs.writeFileSync(path.join(workspaceRoot, '.gitignore'), gitignoreContent);
+            
+            // Make an initial commit
+            try {
+                execSync(`cd "${workspaceRoot}" && git add .gitignore && git commit -m "Initial commit"`, { encoding: 'utf8' });
+            } catch (commitError) {
+                // It's okay if the initial commit fails
+                console.log('Initial commit failed, but repository was initialized');
+            }
+            
+            vscode.window.showInformationMessage('Git repository initialized with a basic .gitignore file.');
+            return true;
+        } catch (error) {
+            console.error('Error initializing Git repository:', error);
+            vscode.window.showErrorMessage(`Failed to initialize Git repository: ${error.message}`);
+            return false;
+        }
     }
 
     function initializeGitRepository(workspaceRoot) {
@@ -279,21 +358,50 @@ function activate(context) {
 
     async function performCommit(workspaceRoot, forced = false) {
         try {
-            if (config.commitOnlyWithChanges && !forced) {
-                const hasChanges = await checkForPendingChanges(workspaceRoot);
-                if (!hasChanges) {
-                    console.log('No changes to commit');
-                    pendingChangesCount = 0;
-                    updateStatusBar();
+            // Make sure Git is initialized
+            if (!isGitRepository(workspaceRoot)) {
+                console.log('Not a Git repository, initializing...');
+                const initialized = initializeGitRepository(workspaceRoot);
+                if (!initialized) {
+                    vscode.window.showErrorMessage('Cannot commit: Failed to initialize Git repository.');
                     return;
                 }
+                // Wait a moment for Git to initialize
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
-
-            // Get current branch name
-            const branch = await getCurrentBranch(workspaceRoot);
+    
+            if (config.commitOnlyWithChanges && !forced) {
+                try {
+                    const hasChanges = await checkForPendingChanges(workspaceRoot);
+                    if (!hasChanges) {
+                        console.log('No changes to commit');
+                        pendingChangesCount = 0;
+                        updateStatusBar();
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Error checking for pending changes:', error);
+                    // Continue anyway, best effort
+                }
+            }
+    
+            // Get current branch name (with fallback)
+            let branch = 'main';
+            try {
+                branch = await getCurrentBranch(workspaceRoot);
+            } catch (error) {
+                console.error('Error getting current branch:', error);
+                // Continue with default branch name
+            }
             
-            // Get list of changed files for commit message
-            const changedFiles = await getChangedFilesCount(workspaceRoot);
+            // Get list of changed files for commit message (with fallback)
+            let changedFiles = '0';
+            try {
+                changedFiles = await getChangedFilesCount(workspaceRoot);
+            } catch (error) {
+                console.error('Error getting changed files count:', error);
+                // Continue with default value
+            }
             
             // Format commit message
             let commitMessage = config.commitMessage
@@ -301,50 +409,84 @@ function activate(context) {
                 .replace('{branch}', branch)
                 .replace('{files}', changedFiles);
             
+            // Safety check for empty message
+            if (!commitMessage.trim()) {
+                commitMessage = `Auto commit: ${new Date().toLocaleString()}`;
+            }
+            
+            // Make sure the message doesn't have problematic characters
+            commitMessage = commitMessage.replace(/"/g, '\\"').replace(/\n/g, ' ');
+            
             // Prepare git command
             let gitCommand = `cd "${workspaceRoot}" && git add .`;
             
-            // Execute command with retries
-            await executeGitCommandWithRetry(gitCommand, workspaceRoot);
-            
-            // Perform commit
-            gitCommand = `cd "${workspaceRoot}" && git commit -m "${commitMessage.replace(/"/g, '\\"')}"`;
-            const commitResult = await executeGitCommandWithRetry(gitCommand, workspaceRoot);
-            
-            // Push if configured
-            if (config.pushAfterCommit) {
-                const remoteExists = await checkRemoteExists(workspaceRoot);
-                if (remoteExists) {
-                    const gitPushCommand = `cd "${workspaceRoot}" && git push -u origin ${branch}`;
-                    await executeGitCommandWithRetry(gitPushCommand, workspaceRoot);
-                } else {
-                    console.log('No remote repository configured, skipping push');
-                    if (config.notifyOnCommit) {
-                        vscode.window.showInformationMessage('Changes committed but not pushed (no remote configured).');
+            try {
+                // Execute command with retries
+                await executeGitCommandWithRetry(gitCommand, workspaceRoot);
+                
+                // Perform commit
+                gitCommand = `cd "${workspaceRoot}" && git commit -m "${commitMessage}"`;
+                const commitResult = await executeGitCommandWithRetry(gitCommand, workspaceRoot);
+                
+                // Push if configured
+                if (config.pushAfterCommit) {
+                    try {
+                        const remoteExists = await checkRemoteExists(workspaceRoot);
+                        if (remoteExists) {
+                            const gitPushCommand = `cd "${workspaceRoot}" && git push -u origin ${branch}`;
+                            await executeGitCommandWithRetry(gitPushCommand, workspaceRoot);
+                        } else {
+                            console.log('No remote repository configured, skipping push');
+                            if (config.notifyOnCommit) {
+                                vscode.window.showInformationMessage(
+                                    'Changes committed but not pushed (no remote configured). Would you like to set up a remote?',
+                                    'Configure Remote', 'Not Now'
+                                ).then(selection => {
+                                    if (selection === 'Configure Remote') {
+                                        vscode.commands.executeCommand('extension.configureGitRemote');
+                                    }
+                                });
+                            }
+                        }
+                    } catch (pushError) {
+                        console.error('Error pushing changes:', pushError);
+                        vscode.window.showWarningMessage(`Changes committed but failed to push: ${pushError.message}`);
                     }
                 }
+                
+                // Update status
+                lastCommitTime = new Date().toLocaleString();
+                pendingChangesCount = 0;
+                updateStatusBar();
+                
+                if (config.notifyOnCommit) {
+                    vscode.window.showInformationMessage(
+                        `Changes successfully committed${config.pushAfterCommit ? ' and pushed' : ''}.`,
+                        'View Changes'
+                    ).then(selection => {
+                        if (selection === 'View Changes') {
+                            vscode.commands.executeCommand('git.viewHistory');
+                        }
+                    });
+                }
+                
+                return commitResult;
+            } catch (error) {
+                // Handle nothing to commit error gracefully
+                if (error.message && error.message.includes('nothing to commit')) {
+                    console.log('Nothing to commit');
+                    pendingChangesCount = 0;
+                    updateStatusBar();
+                    return 'nothing to commit';
+                }
+                
+                console.error(`Error performing commit: ${error.message}`);
+                vscode.window.showErrorMessage(`Commit error: ${error.message}`);
+                throw error;
             }
-            
-            // Update status
-            lastCommitTime = new Date().toLocaleString();
-            pendingChangesCount = 0;
-            updateStatusBar();
-            
-            if (config.notifyOnCommit) {
-                vscode.window.showInformationMessage(
-                    `Changes successfully committed${config.pushAfterCommit ? ' and pushed' : ''}.`,
-                    'View Changes'
-                ).then(selection => {
-                    if (selection === 'View Changes') {
-                        vscode.commands.executeCommand('git.viewHistory');
-                    }
-                });
-            }
-            
-            return commitResult;
-        } catch (error) {
-            console.error(`Error performing commit: ${error.message}`);
-            vscode.window.showErrorMessage(`Commit error: ${error.message}`);
+        } catch (outerError) {
+            console.error(`Fatal error in performCommit: ${outerError.message}`);
+            vscode.window.showErrorMessage(`Failed to commit changes: ${outerError.message}`);
         }
     }
 
