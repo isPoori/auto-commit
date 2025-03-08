@@ -1,54 +1,211 @@
 {
     "name": "omga-auto-commit",
     "displayName": "Omga Auto Commit",
-    "description": "A VS Code extension for automatically committing and pushing code changes.",
-    "version": "0.1.6",
+    "description": "Automatically commit and push changes to Git repository",
+    "version": "1.0.0",
     "publisher": "PouriaHosseini",
     "engines": {
-        "vscode": "^1.60.0"
+      "vscode": "^1.60.0"
     },
     "categories": [
-        "SCM Providers",
-        "Other"
+      "Other"
     ],
-    "icon": "icon.png",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/isPoori/auto-commit"
-    },
-    "bugs": {
-        "url": "https://github.com/isPoori/auto-commit/issues"
-    },
     "activationEvents": [
-        "onCommand:extension.enableAutoCommit",
-        "onCommand:extension.disableAutoCommit"
+      "onCommand:extension.enableAutoCommit",
+      "onCommand:extension.disableAutoCommit",
+      "onCommand:extension.toggleAutoCommit",
+      "onCommand:extension.forceCommitNow",
+      "onCommand:extension.changeCommitDelay",
+      "onCommand:extension.configureGitRemote",
+      "onCommand:extension.showCommitHistory",
+      "onCommand:extension.showCommitLog",
+      "onCommand:extension.showAutoCommitSettings",
+      "onCommand:extension.togglePushAfterCommit",
+      "onCommand:extension.editExcludePatterns",
+      "onCommand:extension.editCommitMessageTemplate",
+      "workspaceContains:.git"
     ],
     "main": "./extension.js",
     "contributes": {
-        "commands": [
-            {
-                "command": "extension.enableAutoCommit",
-                "title": "Enable Auto Commit"
-            },
-            {
-                "command": "extension.disableAutoCommit",
-                "title": "Disable Auto Commit"
-            }
+      "commands": [
+        {
+          "command": "extension.enableAutoCommit",
+          "title": "Enable Auto-Commit"
+        },
+        {
+          "command": "extension.disableAutoCommit",
+          "title": "Disable Auto-Commit"
+        },
+        {
+          "command": "extension.toggleAutoCommit",
+          "title": "Toggle Auto-Commit"
+        },
+        {
+          "command": "extension.forceCommitNow",
+          "title": "Commit Changes Now"
+        },
+        {
+          "command": "extension.changeCommitDelay",
+          "title": "Change Auto-Commit Delay"
+        },
+        {
+          "command": "extension.configureGitRemote",
+          "title": "Configure Git Remote"
+        },
+        {
+          "command": "extension.showCommitHistory",
+          "title": "Show Commit History"
+        },
+        {
+          "command": "extension.showCommitLog",
+          "title": "Show Recent Commits"
+        },
+        {
+          "command": "extension.showAutoCommitSettings",
+          "title": "Open Auto-Commit Settings"
+        },
+        {
+          "command": "extension.togglePushAfterCommit",
+          "title": "Toggle Push After Commit"
+        },
+        {
+          "command": "extension.editExcludePatterns",
+          "title": "Edit Exclude Patterns"
+        },
+        {
+          "command": "extension.editCommitMessageTemplate",
+          "title": "Edit Commit Message Template"
+        }
+      ],
+      "configuration": {
+        "type": "object",
+        "title": "Auto Commit",
+        "properties": {
+          "autoCommit.commitDelay": {
+            "type": "number",
+            "default": 30000,
+            "description": "Delay in milliseconds between detecting changes and committing (minimum 5000)"
+          },
+          "autoCommit.pushAfterCommit": {
+            "type": "boolean",
+            "default": true,
+            "description": "Push changes after each commit"
+          },
+          "autoCommit.excludePatterns": {
+            "type": "array",
+            "default": ["node_modules/**", ".git/**", "**/*.log"],
+            "description": "Patterns to exclude from auto-commit"
+          },
+          "autoCommit.commitMessage": {
+            "type": "string",
+            "default": "Auto commit: {date} - {files} files changed",
+            "description": "Commit message template. Available placeholders: {date}, {branch}, {files}"
+          },
+          "autoCommit.branchHandling": {
+            "type": "string",
+            "enum": ["currentBranchOnly", "allBranches"],
+            "default": "currentBranchOnly",
+            "description": "How to handle different branches when auto-committing"
+          },
+          "autoCommit.maxRetries": {
+            "type": "number",
+            "default": 3,
+            "description": "Maximum number of retries for Git operations"
+          },
+          "autoCommit.retryDelay": {
+            "type": "number",
+            "default": 5000,
+            "description": "Delay in milliseconds between retries"
+          },
+          "autoCommit.notifyOnCommit": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show notification on successful commit"
+          },
+          "autoCommit.commitOnlyWithChanges": {
+            "type": "boolean",
+            "default": true,
+            "description": "Only commit when there are actual changes"
+          }
+        }
+      },
+      "menus": {
+        "commandPalette": [
+          {
+            "command": "extension.enableAutoCommit",
+            "when": "workbenchState == 'workspace'"
+          },
+          {
+            "command": "extension.disableAutoCommit",
+            "when": "workbenchState == 'workspace'"
+          },
+          {
+            "command": "extension.toggleAutoCommit",
+            "when": "workbenchState == 'workspace'"
+          },
+          {
+            "command": "extension.forceCommitNow",
+            "when": "workbenchState == 'workspace'"
+          },
+          {
+            "command": "extension.changeCommitDelay",
+            "when": "workbenchState == 'workspace'"
+          },
+          {
+            "command": "extension.configureGitRemote",
+            "when": "workbenchState == 'workspace'"
+          }
+        ],
+        "explorer/context": [
+          {
+            "command": "extension.forceCommitNow",
+            "group": "7_modification@1",
+            "when": "explorerResourceIsFolder && workbenchState == 'workspace'"
+          }
         ]
+      },
+      "keybindings": [
+        {
+          "command": "extension.forceCommitNow",
+          "key": "ctrl+alt+shift+c",
+          "mac": "cmd+alt+shift+c"
+        },
+        {
+          "command": "extension.toggleAutoCommit",
+          "key": "ctrl+alt+shift+a",
+          "mac": "cmd+alt+shift+a"
+        }
+      ]
     },
     "scripts": {
-        "lint": "eslint .",
-        "pretest": "npm run lint",
-        "test": "node ./test/runTest.js",
-        "package": "vsce package",
-        "publish": "vsce publish"
+      "lint": "eslint .",
+      "pretest": "npm run lint",
+      "test": "node ./test/runTest.js"
     },
     "devDependencies": {
-        "@types/vscode": "^1.60.0",
-        "@types/glob": "^7.1.3",
-        "@types/node": "14.x",
-        "eslint": "^7.19.0",
-        "glob": "^7.1.6",
-        "vscode-test": "^1.5.0"
-    }
+      "@types/vscode": "^1.60.0",
+      "@types/glob": "^7.1.3",
+      "@types/mocha": "^8.2.2",
+      "@types/node": "^14.14.37",
+      "eslint": "^7.24.0",
+      "glob": "^7.1.6",
+      "mocha": "^8.3.2",
+      "typescript": "^4.2.4",
+      "vscode-test": "^1.5.2"
+    },
+    "icon": "icon.png",
+    "repository": {
+    "type": "git",
+    "url": "https://github.com/isPoori/auto-commit.git"
+  },
+  "keywords": [
+    "git",
+    "commit",
+    "auto",
+    "automatic",
+    "push",
+    "vscode",
+    "extension"
+  ],
+  "license": "MIT"
 }
