@@ -18,6 +18,7 @@ function activate(context) {
     let lastCommitTime = null;
     let pendingChangesCount = 0;
     let currentWorkspaceRoot = null;
+    let changedFilesSet = new Set(); // Track changed files since last commit
 
     // Configuration settings with defaults
     let config = {
@@ -25,11 +26,14 @@ function activate(context) {
         pushAfterCommit: true,    // Default: push after each commit
         excludePatterns: ['node_modules/**', '.git/**', '**/*.log'],
         commitMessage: "Auto commit: {date} - {files} files changed",
+        detailedCommitMessage: true, // Default: include detailed file changes
+        maxFilesToList: 5,        // Maximum number of files to list in commit message
         branchHandling: 'currentBranchOnly', // 'currentBranchOnly', 'allBranches'
         maxRetries: 3,            // Maximum number of retries for git operations
         retryDelay: 5000,         // Delay between retries in milliseconds
         notifyOnCommit: true,     // Show notification on successful commit
         commitOnlyWithChanges: true, // Only commit when there are actual changes
+        confirmBeforePush: false, // Ask for confirmation before pushing to remote
     };
 
     // Create status bar item
@@ -52,11 +56,14 @@ function activate(context) {
         config.pushAfterCommit = extensionConfig.get('pushAfterCommit', true);
         config.excludePatterns = extensionConfig.get('excludePatterns', ['node_modules/**', '.git/**', '**/*.log']);
         config.commitMessage = extensionConfig.get('commitMessage', "Auto commit: {date} - {files} files changed");
+        config.detailedCommitMessage = extensionConfig.get('detailedCommitMessage', true);
+        config.maxFilesToList = extensionConfig.get('maxFilesToList', 5);
         config.branchHandling = extensionConfig.get('branchHandling', 'currentBranchOnly');
         config.maxRetries = extensionConfig.get('maxRetries', 3);
         config.retryDelay = extensionConfig.get('retryDelay', 5000);
         config.notifyOnCommit = extensionConfig.get('notifyOnCommit', true);
         config.commitOnlyWithChanges = extensionConfig.get('commitOnlyWithChanges', true);
+        config.confirmBeforePush = extensionConfig.get('confirmBeforePush', false);
     }
 
     // Initially load configuration
@@ -133,6 +140,61 @@ function activate(context) {
         }
     });
 
+    // Function to schedule a commit
+    function scheduleCommit(workspaceRoot) {
+        if (commitTimeout) {
+            clearTimeout(commitTimeout);
+        }
+        
+        commitTimeout = setTimeout(async () => {
+            await performCommit(workspaceRoot);
+            commitTimeout = null;
+        }, config.commitDelay);
+    }
+    
+    // Helper function to check if a file should be ignored based on exclude patterns
+    function shouldIgnoreFile(filePath) {
+        if (!filePath) return true;
+        
+        const relativePath = path.relative(currentWorkspaceRoot, filePath);
+        
+        for (const pattern of config.excludePatterns) {
+            if (vscode.languages.match({ pattern }, vscode.Uri.file(filePath))) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    // Handle file path for tracking
+    function trackFileChange(filePath) {
+        if (!filePath || shouldIgnoreFile(filePath)) return;
+        
+        const relativePath = path.relative(currentWorkspaceRoot, filePath);
+        changedFilesSet.add(relativePath);
+    }
+
+    // Disable auto-commit
+    async function disableAutoCommit() {
+        if (fileWatcher) {
+            fileWatcher.dispose();
+            fileWatcher = null;
+        }
+        
+        if (commitTimeout) {
+            clearTimeout(commitTimeout);
+            commitTimeout = null;
+        }
+        
+        isEnabled = false;
+        changedFilesSet.clear();
+        pendingChangesCount = 0;
+        updateStatusBar();
+        vscode.commands.executeCommand('extension.updateAutoCommitContext');
+        vscode.window.showInformationMessage('Auto-commit disabled.');
+    }
+
     async function enableAutoCommit() {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         
@@ -181,6 +243,22 @@ function activate(context) {
             return;
         }
         
+        // Check if remote exists and offer to set it up
+        const remoteExists = await safeCheckRemoteExists(workspaceRoot);
+        if (!remoteExists && config.pushAfterCommit) {
+            const shouldConfigure = await vscode.window.showInformationMessage(
+                'No remote repository is configured. Would you like to set one up now?',
+                'Yes', 'Not Now'
+            );
+            
+            if (shouldConfigure === 'Yes') {
+                vscode.commands.executeCommand('extension.configureGitRemote');
+            }
+        }
+        
+        // Clear previous changed files
+        changedFilesSet.clear();
+        
         // Set up file watcher for changes
         if (fileWatcher) {
             fileWatcher.dispose();
@@ -192,6 +270,7 @@ function activate(context) {
             fileWatcher.onDidChange(uri => {
                 if (shouldIgnoreFile(uri.fsPath)) return;
                 pendingChangesCount++;
+                trackFileChange(uri.fsPath);
                 scheduleCommit(workspaceRoot);
                 updateStatusBar();
             });
@@ -199,6 +278,7 @@ function activate(context) {
             fileWatcher.onDidCreate(uri => {
                 if (shouldIgnoreFile(uri.fsPath)) return;
                 pendingChangesCount++;
+                trackFileChange(uri.fsPath);
                 scheduleCommit(workspaceRoot);
                 updateStatusBar();
             });
@@ -206,12 +286,14 @@ function activate(context) {
             fileWatcher.onDidDelete(uri => {
                 if (shouldIgnoreFile(uri.fsPath)) return;
                 pendingChangesCount++;
+                trackFileChange(uri.fsPath);
                 scheduleCommit(workspaceRoot);
                 updateStatusBar();
             });
             
             isEnabled = true;
             updateStatusBar();
+            vscode.commands.executeCommand('extension.updateAutoCommitContext');
             vscode.window.showInformationMessage(`Auto-commit enabled. Changes will be committed every ${config.commitDelay / 1000} seconds.`);
         } catch (error) {
             console.error('Error setting up file watcher:', error);
@@ -311,6 +393,23 @@ function activate(context) {
         });
     }
     
+    // Function to get detailed file changes for commit message
+    async function getDetailedFileChanges(workspaceRoot) {
+        if (changedFilesSet.size === 0) return '';
+        
+        // Convert the Set to Array and get the most recent files
+        const changedFiles = Array.from(changedFilesSet);
+        const filesToShow = changedFiles.slice(0, config.maxFilesToList);
+        const additionalCount = changedFiles.length - filesToShow.length;
+        
+        let filesList = filesToShow.map(file => `\n- ${file}`).join('');
+        if (additionalCount > 0) {
+            filesList += `\n- and ${additionalCount} more file(s)`;
+        }
+        
+        return filesList;
+    }
+
     async function performCommit(workspaceRoot, forced = false) {
         try {
             // First verify we're in a Git repository
@@ -329,6 +428,7 @@ function activate(context) {
                     if (!hasChanges) {
                         console.log('No changes to commit');
                         pendingChangesCount = 0;
+                        changedFilesSet.clear();
                         updateStatusBar();
                         return;
                     }
@@ -354,11 +454,26 @@ function activate(context) {
                 console.error('Error getting changed files count:', error);
             }
             
+            // Get detailed file changes if enabled
+            let detailedChanges = '';
+            if (config.detailedCommitMessage) {
+                try {
+                    detailedChanges = await getDetailedFileChanges(workspaceRoot);
+                } catch (error) {
+                    console.error('Error getting detailed file changes:', error);
+                }
+            }
+            
             // Format commit message
             let commitMessage = config.commitMessage
                 .replace('{date}', new Date().toLocaleString())
                 .replace('{branch}', branch)
                 .replace('{files}', changedFiles);
+                
+            // Add detailed file changes if available
+            if (detailedChanges) {
+                commitMessage += `${detailedChanges}`;
+            }
             
             // Safety check for empty message
             if (!commitMessage.trim()) {
@@ -366,7 +481,7 @@ function activate(context) {
             }
             
             // Make sure the message doesn't have problematic characters
-            commitMessage = commitMessage.replace(/"/g, '\\"').replace(/\n/g, ' ');
+            commitMessage = commitMessage.replace(/"/g, '\\"');
             
             // Execute Git add command
             try {
@@ -380,7 +495,31 @@ function activate(context) {
                     try {
                         const remoteExists = await safeCheckRemoteExists(workspaceRoot);
                         if (remoteExists) {
-                            await safeExecuteGitCommand(`cd "${workspaceRoot}" && git push -u origin ${branch}`, workspaceRoot);
+                            // Ask for confirmation if enabled
+                            let shouldPush = true;
+                            if (config.confirmBeforePush) {
+                                const pushConfirmation = await vscode.window.showInformationMessage(
+                                    'Changes committed. Push to remote repository?',
+                                    'Yes', 'No'
+                                );
+                                shouldPush = (pushConfirmation === 'Yes');
+                            }
+                            
+                            if (shouldPush) {
+                                await safeExecuteGitCommand(`cd "${workspaceRoot}" && git push -u origin ${branch}`, workspaceRoot);
+                                if (config.notifyOnCommit) {
+                                    vscode.window.showInformationMessage(
+                                        `Changes committed and pushed to ${branch}.`,
+                                        'View Changes'
+                                    ).then(selection => {
+                                        if (selection === 'View Changes') {
+                                            vscode.commands.executeCommand('git.viewHistory');
+                                        }
+                                    });
+                                }
+                            } else {
+                                vscode.window.showInformationMessage('Changes committed but not pushed.');
+                            }
                         } else {
                             console.log('No remote repository configured, skipping push');
                             if (config.notifyOnCommit) {
@@ -403,11 +542,12 @@ function activate(context) {
                 // Update status
                 lastCommitTime = new Date().toLocaleString();
                 pendingChangesCount = 0;
+                changedFilesSet.clear();
                 updateStatusBar();
                 
-                if (config.notifyOnCommit) {
+                if (config.notifyOnCommit && !config.pushAfterCommit) {
                     vscode.window.showInformationMessage(
-                        `Changes successfully committed${config.pushAfterCommit ? ' and pushed' : ''}.`,
+                        `Changes successfully committed.`,
                         'View Changes'
                     ).then(selection => {
                         if (selection === 'View Changes') {
@@ -420,6 +560,7 @@ function activate(context) {
                 if (error.message && error.message.includes('nothing to commit')) {
                     console.log('Nothing to commit');
                     pendingChangesCount = 0;
+                    changedFilesSet.clear();
                     updateStatusBar();
                     return;
                 }
@@ -524,73 +665,6 @@ function activate(context) {
         });
     }
 
-    async function executeGitCommandWithRetry(command, workspaceRoot, attempt = 1) {
-        return new Promise((resolve, reject) => {
-            exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-                if (error) {
-                    if (attempt <= config.maxRetries) {
-                        console.log(`Retry ${attempt}/${config.maxRetries} for command: ${command}`);
-                        setTimeout(() => {
-                            executeGitCommandWithRetry(command, workspaceRoot, attempt + 1)
-                                .then(resolve)
-                                .catch(reject);
-                        }, config.retryDelay);
-                    } else {
-                        // Handle specific error cases
-                        if (error.message.includes('nothing to commit')) {
-                            resolve('nothing to commit');
-                        } else {
-                            reject(error);
-                        }
-                    }
-                    return;
-                }
-                
-                // Log output for debugging
-                if (stdout) console.log(`Git output: ${stdout}`);
-                if (stderr) console.log(`Git stderr: ${stderr}`);
-                
-                resolve(stdout);
-            });
-        });
-    }
-
-    async function getCurrentBranch(workspaceRoot) {
-        return new Promise((resolve, reject) => {
-            exec(`cd "${workspaceRoot}" && git branch --show-current`, (error, stdout) => {
-                if (error) {
-                    reject(error);
-                    return;
-                }
-                resolve(stdout.trim());
-            });
-        });
-    }
-
-    async function getChangedFilesCount(workspaceRoot) {
-        return new Promise((resolve, reject) => {
-            exec(`cd "${workspaceRoot}" && git status --porcelain | wc -l`, (error, stdout) => {
-                if (error) {
-                    reject(error);
-                    return;
-                }
-                resolve(stdout.trim());
-            });
-        });
-    }
-
-    async function checkRemoteExists(workspaceRoot) {
-        return new Promise((resolve) => {
-            exec(`cd "${workspaceRoot}" && git remote -v`, (error, stdout) => {
-                if (error || !stdout.trim()) {
-                    resolve(false);
-                    return;
-                }
-                resolve(true);
-            });
-        });
-    }
-
     // Register command to configure remote if not set
     let configureRemoteCommand = vscode.commands.registerCommand('extension.configureGitRemote', async function () {
         const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -603,7 +677,7 @@ function activate(context) {
         const workspaceRoot = workspaceFolders[0].uri.fsPath;
         
         // Check if remote is already configured
-        const remoteExists = await checkRemoteExists(workspaceRoot);
+        const remoteExists = await safeCheckRemoteExists(workspaceRoot);
         if (remoteExists) {
             const shouldOverwrite = await vscode.window.showWarningMessage(
                 'Remote repository is already configured. Do you want to overwrite it?',
@@ -634,18 +708,32 @@ function activate(context) {
         // Configure remote
         try {
             if (remoteExists) {
-                await executeGitCommandWithRetry(`cd "${workspaceRoot}" && git remote remove origin`, workspaceRoot);
+                await safeExecuteGitCommand(`cd "${workspaceRoot}" && git remote remove origin`, workspaceRoot);
             }
             
-            await executeGitCommandWithRetry(`cd "${workspaceRoot}" && git remote add origin ${remoteUrl}`, workspaceRoot);
+            await safeExecuteGitCommand(`cd "${workspaceRoot}" && git remote add origin ${remoteUrl}`, workspaceRoot);
             
             // Try to set upstream branch
             try {
-                const branch = await getCurrentBranch(workspaceRoot);
-                await executeGitCommandWithRetry(`cd "${workspaceRoot}" && git push -u origin ${branch}`, workspaceRoot);
-                vscode.window.showInformationMessage('Remote repository configured and upstream branch set.');
+                const branch = await safeGetCurrentBranch(workspaceRoot);
+                
+                // Ask if user wants to push immediately
+                const shouldPush = await vscode.window.showInformationMessage(
+                    'Remote repository configured. Would you like to push your current branch now?',
+                    'Yes', 'No'
+                );
+                
+                if (shouldPush === 'Yes') {
+                    try {
+                        await safeExecuteGitCommand(`cd "${workspaceRoot}" && git push -u origin ${branch}`, workspaceRoot);
+                        vscode.window.showInformationMessage('Remote repository configured and changes pushed successfully.');
+                    } catch (pushError) {
+                        vscode.window.showErrorMessage(`Failed to push changes: ${pushError.message}`);
+                    }
+                } else {
+                    vscode.window.showInformationMessage('Remote repository configured. You can push changes manually or wait for the next auto-commit.');
+                }
             } catch (error) {
-                // If push fails, just inform about remote configuration
                 vscode.window.showInformationMessage('Remote repository configured. You may need to push manually the first time.');
             }
         } catch (error) {
@@ -706,6 +794,24 @@ function activate(context) {
         vscode.window.showInformationMessage(`Push after commit: ${config.pushAfterCommit ? 'Enabled' : 'Disabled'}`);
     });
 
+    // Command to toggle detailed commit messages
+    let toggleDetailedCommitCommand = vscode.commands.registerCommand('extension.toggleDetailedCommit', async function () {
+        config.detailedCommitMessage = !config.detailedCommitMessage;
+        // Also update user settings
+        const extensionConfig = vscode.workspace.getConfiguration('autoCommit');
+        await extensionConfig.update('detailedCommitMessage', config.detailedCommitMessage, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage(`Detailed commit messages: ${config.detailedCommitMessage ? 'Enabled' : 'Disabled'}`);
+    });
+
+    // Command to toggle confirmation before push
+    let toggleConfirmBeforePushCommand = vscode.commands.registerCommand('extension.toggleConfirmBeforePush', async function () {
+        config.confirmBeforePush = !config.confirmBeforePush;
+        // Also update user settings
+        const extensionConfig = vscode.workspace.getConfiguration('autoCommit');
+        await extensionConfig.update('confirmBeforePush', config.confirmBeforePush, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage(`Confirm before push: ${config.confirmBeforePush ? 'Enabled' : 'Disabled'}`);
+    });
+
     // Command to edit exclude patterns
     let editExcludePatternsCommand = vscode.commands.registerCommand('extension.editExcludePatterns', async function () {
         const patternsString = await vscode.window.showInputBox({
@@ -749,6 +855,8 @@ function activate(context) {
     context.subscriptions.push(showCommitLogCommand);
     context.subscriptions.push(showSettingsCommand);
     context.subscriptions.push(togglePushAfterCommitCommand);
+    context.subscriptions.push(toggleDetailedCommitCommand);
+    context.subscriptions.push(toggleConfirmBeforePushCommand);
     context.subscriptions.push(editExcludePatternsCommand);
     context.subscriptions.push(editCommitMessageTemplateCommand);
 

@@ -1,113 +1,70 @@
 # Omga Auto Commit
 
-This extension automatically commits and pushes changes to your Git repository at regular intervals. Perfect for projects where you want to maintain a continuous history of your work without manually committing.
+A VS Code extension that automatically commits and pushes your changes to Git repositories at regular intervals. Perfect for continuous version control without manual intervention.
 
-## Features
+## Key Features
 
-- **Automatic Commits**: Automatically commit your changes at regular intervals
-- **Auto Push**: Optionally push commits to remote repository
-- **Customizable Delay**: Set your preferred interval between commits
-- **Exclude Patterns**: Define patterns to exclude from auto-commit
-- **Status Bar Integration**: Visual indicator showing auto-commit status
-- **Custom Commit Messages**: Customize commit message with dynamic placeholders
-- **Error Recovery**: Automatically retry failed Git operations
-- **Git Remote Setup**: Configure Git remote repositories easily
-- **Repository Management**: Initialize Git repositories if needed
+- **Smart Auto-Commit**: Automatic commits with detailed file change tracking
+- **Repository Management**: Initialize and configure Git repositories with prompts
+- **Customizable Behavior**: Configure commit intervals, messages, and push settings
+- **File Change Detection**: Identifies which files changed for detailed commit messages
+- **Push Confirmation**: Optional confirmation before pushing changes to remote
+- **Error Recovery**: Auto-retry for failed Git operations
+
+## Usage
+
+1. Open a Git repository in VS Code
+2. Run `Enable Auto-Commit` from the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P` on Mac)
+3. Make changes to your files
+4. The extension will automatically commit and track changed files
 
 ## Commands
 
-All commands can be accessed via the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P` on Mac):
+Access these commands via the Command Palette:
 
-- `Enable Auto-Commit`: Start automatic commit monitoring
-- `Disable Auto-Commit`: Stop automatic commit monitoring
-- `Toggle Auto-Commit`: Switch between enabled and disabled states
-- `Commit Changes Now`: Force an immediate commit
-- `Change Auto-Commit Delay`: Modify the time between automatic commits
-- `Configure Git Remote`: Set up or change the remote Git repository
-- `Show Commit History`: View the Git history
-- `Show Recent Commits`: Display recent commits in output panel
-- `Open Auto-Commit Settings`: Open the extension settings
-- `Toggle Push After Commit`: Enable/disable automatic pushing
-- `Edit Exclude Patterns`: Modify the file patterns to ignore
-- `Edit Commit Message Template`: Change the commit message format
+| Command | Description |
+|---------|-------------|
+| `Enable Auto-Commit` | Start automatic commit monitoring |
+| `Disable Auto-Commit` | Stop automatic commit monitoring |
+| `Toggle Auto-Commit` | Switch between enabled/disabled states |
+| `Commit Changes Now` | Force an immediate commit |
+| `Change Auto-Commit Delay` | Modify time between automatic commits |
+| `Configure Git Remote` | Set up or change remote Git repository |
+| `Toggle Detailed Commit Messages` | Enable/disable file-specific commit details |
+| `Toggle Confirmation Before Push` | Enable/disable push confirmation |
+
+## Settings
+
+| Setting | Description |
+|---------|-------------|
+| `autoCommit.commitDelay` | Time between commits in milliseconds (min 5000) |
+| `autoCommit.pushAfterCommit` | Whether to push after each commit |
+| `autoCommit.detailedCommitMessage` | Include specific file changes in commit messages |
+| `autoCommit.maxFilesToList` | Maximum files to list in commit message |
+| `autoCommit.confirmBeforePush` | Ask for confirmation before pushing |
+| `autoCommit.excludePatterns` | File patterns to exclude from auto-commit |
+| `autoCommit.commitMessage` | Commit message template with placeholders: `{date}`, `{branch}`, `{files}` |
 
 ## Keyboard Shortcuts
 
 - `Ctrl+Alt+Shift+C` (`Cmd+Alt+Shift+C` on Mac): Force immediate commit
 - `Ctrl+Alt+Shift+A` (`Cmd+Alt+Shift+A` on Mac): Toggle auto-commit
 
-## Settings
-
-This extension offers several customization options:
-
-- `autoCommit.commitDelay`: Time in milliseconds between detecting changes and committing (minimum 5000)
-- `autoCommit.pushAfterCommit`: Whether to push changes after each commit
-- `autoCommit.excludePatterns`: Array of glob patterns to exclude from auto-commit
-- `autoCommit.commitMessage`: Commit message template with placeholders:
-  - `{date}`: Current date and time
-  - `{branch}`: Current Git branch name
-  - `{files}`: Number of files changed
-- `autoCommit.branchHandling`: How to handle different branches
-- `autoCommit.maxRetries`: Maximum number of retry attempts for Git operations
-- `autoCommit.retryDelay`: Time in milliseconds between retry attempts
-- `autoCommit.notifyOnCommit`: Show notification on successful commit
-- `autoCommit.commitOnlyWithChanges`: Only commit when there are actual changes
-
-## Installation
-
-1. Open VS Code
-2. Go to Extensions view (Ctrl+Shift+X)
-3. Search for "Omga Auto Commit"
-4. Click Install
-
-## Usage
-
-1. Open a Git repository in VS Code
-2. Run the command "Enable Auto-Commit" from the Command Palette
-3. Make changes to your files
-4. The extension will automatically commit (and push if configured) your changes
-
 ## Requirements
 
-- Git must be installed and available in your PATH
+- Git installed and available in PATH
 - VS Code 1.60.0 or higher
 
-## Extension Settings
+## Support & Contributions
 
-This extension contributes the following settings:
-
-* `autoCommit.commitDelay`: Delay between detecting changes and committing
-* `autoCommit.pushAfterCommit`: Whether to push after each commit
-* `autoCommit.excludePatterns`: File patterns to exclude
-* `autoCommit.commitMessage`: Commit message template
-* `autoCommit.branchHandling`: How to handle different branches
-* `autoCommit.maxRetries`: Maximum number of retries
-* `autoCommit.retryDelay`: Delay between retries
-* `autoCommit.notifyOnCommit`: Show notification on commit
-* `autoCommit.commitOnlyWithChanges`: Only commit when there are changes
-
-## Known Issues
-
-- The extension may conflict with other Git extensions that perform automatic operations
-- Large repositories with many files may experience performance issues
-
-## Release Notes
-
-### 1.2.0
-
-- Initial release
-- Automatic commit and push functionality
-- Customizable settings
-- Status bar integration
-
-## Issues & Contributions
-If you find a bug or have suggestions, please open an issue at:
+Found a bug or have a feature request? Please open an issue at:
 [GitHub Issues](https://github.com/isPoori/auto-commit/issues)
 
-# Developer
-Pouria Hosseini 
-[Telegram](https://t.me/isPoori) 
+## Developer
+
+Pouria Hosseini  
+[Telegram](https://t.me/isPoori)
 
 ## License
 
-This extension is licensed under the **MIT License**.
+MIT License

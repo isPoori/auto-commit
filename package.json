@@ -2,7 +2,7 @@
     "name": "omga-auto-commit",
     "displayName": "Omga Auto Commit",
     "description": "Automatically commit and push changes to Git repository",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "publisher": "PouriaHosseini",
     "engines": {
         "vscode": "^1.60.0"
@@ -21,6 +21,8 @@
         "onCommand:extension.showCommitLog",
         "onCommand:extension.showAutoCommitSettings",
         "onCommand:extension.togglePushAfterCommit",
+        "onCommand:extension.toggleDetailedCommit",
+        "onCommand:extension.toggleConfirmBeforePush",
         "onCommand:extension.editExcludePatterns",
         "onCommand:extension.editCommitMessageTemplate",
         "workspaceContains:.git"
@@ -69,6 +71,14 @@
                 "title": "Toggle Push After Commit"
             },
             {
+                "command": "extension.toggleDetailedCommit",
+                "title": "Toggle Detailed Commit Messages"
+            },
+            {
+                "command": "extension.toggleConfirmBeforePush",
+                "title": "Toggle Confirmation Before Push"
+            },
+            {
                 "command": "extension.editExcludePatterns",
                 "title": "Edit Exclude Patterns"
             },
@@ -104,6 +114,21 @@
                     "type": "string",
                     "default": "Auto commit: {date} - {files} files changed",
                     "description": "Commit message template. Available placeholders: {date}, {branch}, {files}"
+                },
+                "autoCommit.detailedCommitMessage": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Include detailed list of changed files in commit message"
+                },
+                "autoCommit.maxFilesToList": {
+                    "type": "number",
+                    "default": 5,
+                    "description": "Maximum number of files to list in detailed commit message"
+                },
+                "autoCommit.confirmBeforePush": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Ask for confirmation before pushing to remote repository"
                 },
                 "autoCommit.branchHandling": {
                     "type": "string",
