@@ -2,7 +2,7 @@
     "name": "omga-auto-commit",
     "displayName": "Omga Auto Commit",
     "description": "Automatically commit and push changes to Git repository",
-    "version": "1.2.3",
+    "version": "1.3.0",
     "publisher": "PouriaHosseini",
     "engines": {
         "vscode": "^1.60.0"
