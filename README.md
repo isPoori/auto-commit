@@ -64,6 +64,8 @@ Found a bug or have a feature request? Please open an issue at:
 
 Pouria Hosseini  
 [Telegram](https://t.me/isPoori)
+- - -
+[Mail](mail:pouriahosseini@outlook.com)
 
 ## License
 
